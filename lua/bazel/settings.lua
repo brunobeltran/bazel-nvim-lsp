@@ -1,6 +1,6 @@
 local M = {}
 local DEFAULT_SETTINGS = {
-    default_rule_name = "py_binary"
+    allowed_rule_names = { "py_binary", "py_test", },
 }
 
 M._DEFAULT_SETTINGS = DEFAULT_SETTINGS

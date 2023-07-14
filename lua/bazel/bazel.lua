@@ -84,15 +84,15 @@ local function _update_targets(_, data, _)
     end
 end
 
-function M.BazelListTargets(file, rule_name)
+function M.BazelListTargets(file, allowed_rule_names)
     if M._CURRENT_WORKSPACE == "" then
         local workspace_job = M.BazelWorkspace()
         vim.fn.jobwait({ workspace_job })
     end
     file = file or vim.api.nvim_buf_get_name(0)
-    rule_name = rule_name or settings.current.default_rule_name
-    local query = "kind(" .. '"' .. rule_name .. '"' .. ", rdeps(//..., " ..
-        M.BazelTargetFromFile(file) .. "))"
+    allowed_rule_names = allowed_rule_names or settings.current.allowed_rule_names
+    local query = "kind(" .. '"' .. table.concat(allowed_rule_names, "|") ..
+        '"' .. ", rdeps(//..., " .. M.BazelTargetFromFile(file) .. "))"
     local job_id = vim.fn.jobstart(
         { "bazel", "query", query },
         {
