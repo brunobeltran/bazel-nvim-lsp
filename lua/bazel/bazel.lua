@@ -1,7 +1,6 @@
 local pathlib = require("bazel.path")
 local settings = require("bazel.settings")
 local scandir = require("plenary.scandir")
-local Path = require("plenary.path")
 
 local M = {}
 
@@ -9,7 +8,13 @@ M._CURRENT_WORKSPACE = ""
 M._CURRENT_TARGET = ""
 M._POSSIBLE_TARGETS = {}
 
-function M.BazelWorkspace(path)
+function M._BazelWorkspace(path)
+    -- TODO: make target run completely asynchronously. We want the ui to
+    -- display "we are sorry, there is no workspace loaded yet" while this is
+    -- still running (but only if it takes longer than some fixed time to run,
+    -- as it is likely to do on first invocation). We can, for example, maintain
+    -- a global "is in progress" state that we can update and use a callback
+    -- instead of directly calling the *blocking* `vim.fn.system` here.
     path = path or pathlib.parent(vim.api.nvim_buf_get_name(0))
     M._CURRENT_WORKSPACE = vim.fn.system({ "bazel", "info", "workspace" }):gsub("%s+", "")
     return M._CURRENT_WORKSPACE
@@ -18,7 +23,7 @@ end
 function M.BazelSetTarget(target)
     target = target or M.BazelListTargets()[1]
     M._CURRENT_TARGET = target
-    local runfiles = M.BazelRunfilesFromTarget(target)
+    local runfiles = M._BazelRunfilesFromTarget(target)
     -- TODO: upgrade to using scan_dir_async and keep the list separate (apply
     -- it on_exit of the scan_dir_async call).
     local site_packages = scandir.scan_dir(
@@ -44,7 +49,7 @@ function M.BazelSetTarget(target)
     end
 end
 
-function M.BazelTargetFromFile(file)
+function M._BazelTargetFromFile(file)
     local package = pathlib.parent(file)
     local file_name = file:sub(#package + 1)
     if (package:sub(1, #M._CURRENT_WORKSPACE) ~= M._CURRENT_WORKSPACE) then
@@ -60,14 +65,14 @@ function M.BazelTargetFromFile(file)
     return "/" .. package .. ":" .. file_name
 end
 
-function M.BazelRunfiles()
+function M._BazelRunfiles()
     if M._CURRENT_TARGET == "" then
         return nil, "No target currently set."
     end
-    return M.BazelRunfilesFromTarget(M._CURRENT_TARGET)
+    return M._BazelRunfilesFromTarget(M._CURRENT_TARGET)
 end
 
-function M.BazelRunfilesFromTarget(target_name)
+function M._BazelRunfilesFromTarget(target_name)
     local package, target = target_name:match("//(.*):(.*)")
     return pathlib.concat({ M._CURRENT_WORKSPACE, "bazel-bin", package, target .. ".runfiles" })
 end
@@ -86,13 +91,14 @@ end
 
 function M.BazelListTargets(file, allowed_rule_names)
     if M._CURRENT_WORKSPACE == "" then
-        local workspace_job = M.BazelWorkspace()
+        local workspace_job = M._BazelWorkspace()
         vim.fn.jobwait({ workspace_job })
     end
     file = file or vim.api.nvim_buf_get_name(0)
     allowed_rule_names = allowed_rule_names or settings.current.allowed_rule_names
     local query = "kind(" .. '"' .. table.concat(allowed_rule_names, "|") ..
-        '"' .. ", rdeps(//..., " .. M.BazelTargetFromFile(file) .. "))"
+        '"' .. ", rdeps(//..., " .. M._BazelTargetFromFile(file) .. "))"
+    vim.print(query)
     local job_id = vim.fn.jobstart(
         { "bazel", "query", query },
         {
